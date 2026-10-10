@@ -1,0 +1,56 @@
+# Triggered on every push to `production` (i.e. after a PR merge from
+# `staging`). Applies pending drizzle migrations against the production
+# Supabase Postgres, then deploys the Expo build to the EAS Hosting
+# `production` alias.
+#
+# Uses `drizzle-kit migrate` directly over the Supabase pooler URL exposed
+# as the `DATABASE_URL` environment secret — no Supabase CLI, no linking,
+# no dry-run round-trip.
+
+name: Deploy — Production
+
+on:
+  push:
+    branches: [production]
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+jobs:
+  migrate-and-deploy:
+    name: Migrate + deploy (production)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.7.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Apply drizzle migrations to production Postgres
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SKIP_ENV_VALIDATION: "1"
+        run: pnpm db:migrate
+
+      - name: Pull EAS env vars (production)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: pnpm dlx eas-cli@18.7.0 env:pull --environment production --non-interactive
+
+      - name: Export web bundle
+        run: pnpm expo export --platform web
+
+      - name: Deploy to EAS Hosting (production)
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+        run: pnpm dlx eas-cli@18.7.0 deploy --prod --non-interactive

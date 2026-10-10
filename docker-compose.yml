@@ -1,0 +1,63 @@
+# Louaji — containerized local stack on DELIBERATELY SHIFTED ports so it never
+# collides with a normal host dev setup (`pnpm dev`, local Supabase CLI, raw pg).
+#
+#   ┌─────────────┬──────────────────────────┬───────────────────────┐
+#   │ service     │ normal / local port      │ this stack (host)     │
+#   ├─────────────┼──────────────────────────┼───────────────────────┤
+#   │ web app     │ 8081 (expo) / 3000 (eas) │ 3100                  │
+#   │ postgres    │ 5432 (pg) / 54322 (sb)   │ 55432                 │
+#   └─────────────┴──────────────────────────┴───────────────────────┘
+#
+# Usage:
+#   docker compose up --build           # web on http://localhost:3100
+#   docker compose run --rm app pnpm db:migrate   # apply Drizzle migrations to the db service
+#
+# The `db` service is a self-contained PostGIS Postgres for running the app
+# against a throwaway database. For full Supabase Auth (phone OTP) you still use
+# the Supabase CLI stack; point DATABASE_URL / EXPO_PUBLIC_SUPABASE_URL at it via
+# a .env override if you prefer.
+
+services:
+  app:
+    build:
+      context: .
+      target: runtime
+    ports:
+      - "3100:3100"
+    environment:
+      NODE_ENV: development
+      EXPO_WEB_PORT: "3100"
+      # App talks to the bundled db service over the compose network. Override
+      # in a .env file to target a Supabase stack instead.
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/louaji
+      EXPO_PUBLIC_SUPABASE_URL: ${EXPO_PUBLIC_SUPABASE_URL:-http://localhost:54321}
+      EXPO_PUBLIC_SUPABASE_ANON_KEY: ${EXPO_PUBLIC_SUPABASE_ANON_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+    depends_on:
+      db:
+        condition: service_healthy
+    # Hot-reload source while keeping the image's node_modules intact.
+    volumes:
+      - .:/app
+      - /app/node_modules
+
+  db:
+    image: postgis/postgis:17-3.5
+    # Container listens on the standard 5432 internally; only the HOST mapping is
+    # shifted to 55432 so it never clashes with a local Postgres or Supabase.
+    ports:
+      - "55432:5432"
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: louaji
+    volumes:
+      - louaji-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d louaji"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  louaji-db-data:

@@ -1,0 +1,67 @@
+# Validates pending drizzle migrations before merging into a deployment
+# branch. Spins up a throwaway Postgres (with PostGIS) inside the runner,
+# applies every drizzle migration from scratch via `drizzle-kit migrate`,
+# and fails the PR if any migration does not apply cleanly.
+#
+# Against a real Postgres (not a dry-runner) because drizzle-kit does not
+# have a first-class dry-run mode and because applying migrations against
+# an ephemeral container catches SQL errors that a static check would miss.
+
+name: PR Migration Dry-Run
+
+on:
+  pull_request:
+    branches: [staging, production]
+    paths:
+      - "drizzle/migrations/**"
+      - "src/db/**"
+      - "drizzle.config.ts"
+
+concurrency:
+  group: pr-migration-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  dry-run:
+    name: drizzle-kit migrate (ephemeral Postgres)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+
+    services:
+      postgres:
+        image: postgis/postgis:17-3.5
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 54329:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.7.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Bootstrap Supabase shape stubs (ephemeral CI only)
+        env:
+          PGPASSWORD: postgres
+        run: psql -h 127.0.0.1 -p 54329 -U postgres -d postgres -v ON_ERROR_STOP=1 -f .github/fixtures/supabase-bootstrap.sql
+
+      - name: Apply drizzle migrations against ephemeral Postgres
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@127.0.0.1:54329/postgres
+          SKIP_ENV_VALIDATION: "1"
+        run: pnpm db:migrate

@@ -1,0 +1,88 @@
+# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# env files — local secrets, never committed (only .env.example is tracked)
+.env
+.env.*
+!.env.example
+supabase/.env
+supabase/functions/.env
+*.bak
+
+# logs
+*.log
+logs/
+pnpm-debug.log*
+
+# caches / build output
+.cache/
+coverage/
+.eslintcache
+.turbo/
+.vercel/
+.wrangler/
+
+# Windows / Linux OS files
+Thumbs.db
+Desktop.ini
+*~
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders (Expo prebuild)
+/ios
+/android
+
+# Supabase CLI local state
+supabase/.branches/
+supabase/.temp/
+
+
+# Husky — auto-generated wrapper (hooks themselves are tracked)
+.husky/_/
+
+# Claude Code — user-local assistant state, never shared with the team.
+# We ignore direct children of .claude/ (settings.local.json etc.) rather than
+# the directory itself, so the negation below can re-include .claude/skills/.
+# Git won't re-include anything whose parent directory is excluded.
+.claude/*
+
+# Claude Code — project-level skills ARE shared with the team. These are the
+# technology/practice playbooks every teammate's Claude session should auto-load.
+!.claude/skills/
+
+# IDE / editor (except .vscode which holds shared project-level settings)
+.idea/
+*.swp
+*.swo
+.gstack/

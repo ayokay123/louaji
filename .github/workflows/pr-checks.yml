@@ -1,0 +1,65 @@
+# Runs on every pull request.
+#
+# - `lint-and-typecheck` runs on every PR (fast: ~30s).
+# - `build-web` runs ONLY on PRs into `staging` or `production` — it catches
+#   bundler-level failures (Metro / NativeWind / env resolution / native modules
+#   leaking into the web bundle) that `tsc --noEmit` cannot see. Skipping it on
+#   PRs into `development` keeps the dev loop fast.
+#
+# Drizzle migrations are validated separately by `pr-migration-dry-run.yml`,
+# which also only runs on PRs into `staging` or `production`.
+
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [development, staging, production]
+
+concurrency:
+  group: pr-checks-${{ github.head_ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-and-typecheck:
+    name: Lint, format, typecheck
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.7.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm format:check
+
+      - run: pnpm lint
+
+      - run: pnpm typecheck
+
+  build-web:
+    name: Build web bundle (staging/prod PRs only)
+    if: contains(fromJSON('["staging", "production"]'), github.base_ref)
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10.7.0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Build web bundle
+        run: pnpm build:web
